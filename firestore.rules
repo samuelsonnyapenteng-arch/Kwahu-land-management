@@ -1,0 +1,499 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Hardened Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'samuelsonnyapenteng@gmail.com';
+    }
+
+    function hasUserProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isSuperAdmin() {
+      return isBootstrappedAdmin() || (isEmailVerified() && hasUserProfile() && getUserRole() == 'super_admin');
+    }
+
+    function isPalaceAdmin() {
+      return isSuperAdmin() || (isEmailVerified() && hasUserProfile() && getUserRole() == 'palace_admin');
+    }
+
+    function isSurveyorOrAdmin() {
+      return isSuperAdmin() || (isEmailVerified() && hasUserProfile() && getUserRole() in ['surveyor', 'palace_admin']);
+    }
+
+    function isApprovingOfficer() {
+      return isSuperAdmin() || (isEmailVerified() && hasUserProfile() && getUserRole() == 'approving_officer');
+    }
+
+    function isPalaceStaff() {
+      return isSuperAdmin() || (isEmailVerified() && hasUserProfile() && getUserRole() in ['palace_admin', 'surveyor', 'approving_officer']);
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'role', 'department', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.role in ['super_admin', 'palace_admin', 'surveyor', 'approving_officer', 'applicant']
+        && (!('department' in data) || (data.department is string && data.department.size() <= 120))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'phone', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 40))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLandParcel(data) {
+      return data.keys().hasAll([
+          'parcelCode', 'title', 'zone', 'landUse', 'areaSqm', 'areaAcres',
+          'centroidLat', 'centroidLng', 'coordinates', 'status',
+          'customaryFeeGhs', 'isPublicCadastre', 'createdByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'parcelCode', 'title', 'zone', 'landUse', 'areaSqm', 'areaAcres',
+          'centroidLat', 'centroidLng', 'coordinates', 'status', 'surveyPlanRef',
+          'customaryFeeGhs', 'notes', 'isPublicCadastre', 'createdByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.parcelCode is string && data.parcelCode.size() >= 3 && data.parcelCode.size() <= 32 && data.parcelCode.matches('^[A-Z0-9\\-]+$')
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 160
+        && data.zone is string && data.zone.size() >= 2 && data.zone.size() <= 120
+        && data.landUse in ['Residential', 'Commercial', 'Agricultural', 'Civic']
+        && (data.areaSqm is int || data.areaSqm is float) && data.areaSqm > 0
+        && (data.areaAcres is int || data.areaAcres is float) && data.areaAcres > 0
+        && (data.centroidLat is int || data.centroidLat is float)
+        && (data.centroidLng is int || data.centroidLng is float)
+        && data.coordinates is list && data.coordinates.size() >= 3 && data.coordinates.size() <= 50
+        && data.coordinates[0] is map
+        && data.coordinates[0].keys().hasAll(['lat', 'lng'])
+        && data.coordinates[0].keys().hasOnly(['lat', 'lng'])
+        && (data.coordinates[0].lat is int || data.coordinates[0].lat is float)
+        && (data.coordinates[0].lng is int || data.coordinates[0].lng is float)
+        && data.status in ['Available', 'Pending', 'Allocated', 'Disputed']
+        && (!('surveyPlanRef' in data) || (data.surveyPlanRef is string && data.surveyPlanRef.size() <= 80))
+        && (data.customaryFeeGhs is int || data.customaryFeeGhs is float) && data.customaryFeeGhs >= 0
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && data.isPublicCadastre == true
+        && data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidParcelDocument(data) {
+      return data.keys().hasAll([
+          'parcelId', 'parcelCode', 'documentType', 'referenceNo',
+          'fileName', 'isPublicCadastre', 'uploadedByUid', 'uploadedAt'
+        ])
+        && data.keys().hasOnly([
+          'parcelId', 'parcelCode', 'documentType', 'referenceNo',
+          'fileName', 'summary', 'verifiedBy', 'isPublicCadastre', 'uploadedByUid', 'uploadedAt'
+        ])
+        && isValidId(data.parcelId)
+        && data.parcelCode is string && data.parcelCode.size() >= 3 && data.parcelCode.size() <= 32
+        && data.documentType in ['Survey Plan', 'Site Plan', 'Palace Allocation Note', 'Boundary Verification', 'Other']
+        && data.referenceNo is string && data.referenceNo.size() >= 2 && data.referenceNo.size() <= 80
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 160
+        && (!('summary' in data) || (data.summary is string && data.summary.size() <= 600))
+        && (!('verifiedBy' in data) || (data.verifiedBy is string && data.verifiedBy.size() <= 120))
+        && data.isPublicCadastre == true
+        && data.uploadedByUid is string && data.uploadedByUid.size() >= 1 && data.uploadedByUid.size() <= 128
+        && data.uploadedAt is timestamp;
+    }
+
+    function isValidLandApplication(data) {
+      return data.keys().hasAll([
+          'applicationCode', 'parcelId', 'parcelCode', 'parcelZone',
+          'applicantUid', 'applicantName', 'purpose', 'status', 'submittedAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'applicationCode', 'parcelId', 'parcelCode', 'parcelZone',
+          'applicantUid', 'applicantName', 'purpose', 'proposedDevelopment',
+          'status', 'reviewerNotes', 'reviewedByName', 'submittedAt', 'updatedAt'
+        ])
+        && data.applicationCode is string && data.applicationCode.size() >= 3 && data.applicationCode.size() <= 32
+        && isValidId(data.parcelId)
+        && data.parcelCode is string && data.parcelCode.size() >= 3 && data.parcelCode.size() <= 32
+        && data.parcelZone is string && data.parcelZone.size() >= 2 && data.parcelZone.size() <= 120
+        && data.applicantUid is string && data.applicantUid.size() >= 1 && data.applicantUid.size() <= 128
+        && data.applicantName is string && data.applicantName.size() >= 2 && data.applicantName.size() <= 120
+        && data.purpose is string && data.purpose.size() >= 3 && data.purpose.size() <= 200
+        && (!('proposedDevelopment' in data) || (data.proposedDevelopment is string && data.proposedDevelopment.size() <= 800))
+        && data.status in ['Submitted', 'Under Verification', 'Approved', 'Rejected']
+        && (!('reviewerNotes' in data) || (data.reviewerNotes is string && data.reviewerNotes.size() <= 800))
+        && (!('reviewedByName' in data) || (data.reviewedByName is string && data.reviewedByName.size() <= 120))
+        && data.submittedAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidApplicationContact(data) {
+      return data.keys().hasAll(['applicantUid', 'applicantEmail', 'applicantPhone', 'updatedAt'])
+        && data.keys().hasOnly(['applicantUid', 'applicantEmail', 'applicantPhone', 'nationalIdRef', 'applicantAddress', 'updatedAt'])
+        && data.applicantUid is string && data.applicantUid.size() >= 1 && data.applicantUid.size() <= 128
+        && data.applicantEmail is string && data.applicantEmail.size() >= 3 && data.applicantEmail.size() <= 200
+        && data.applicantPhone is string && data.applicantPhone.size() >= 5 && data.applicantPhone.size() <= 40
+        && (!('nationalIdRef' in data) || (data.nationalIdRef is string && data.nationalIdRef.size() <= 64))
+        && (!('applicantAddress' in data) || (data.applicantAddress is string && data.applicantAddress.size() <= 240))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLandAllocation(data) {
+      return data.keys().hasAll([
+          'allocationCode', 'applicationId', 'parcelId', 'parcelCode',
+          'applicantUid', 'applicantName', 'approvedByUid', 'approvedByName',
+          'approvalDate', 'customaryFeeGhs', 'paymentStatus', 'status'
+        ])
+        && data.keys().hasOnly([
+          'allocationCode', 'applicationId', 'parcelId', 'parcelCode',
+          'applicantUid', 'applicantName', 'approvedByUid', 'approvedByName',
+          'approvalDate', 'customaryFeeGhs', 'paymentStatus', 'status'
+        ])
+        && data.allocationCode is string && data.allocationCode.size() >= 3 && data.allocationCode.size() <= 32
+        && isValidId(data.applicationId)
+        && isValidId(data.parcelId)
+        && data.parcelCode is string && data.parcelCode.size() >= 3 && data.parcelCode.size() <= 32
+        && data.applicantUid is string && data.applicantUid.size() >= 1 && data.applicantUid.size() <= 128
+        && data.applicantName is string && data.applicantName.size() >= 2 && data.applicantName.size() <= 120
+        && data.approvedByUid is string && data.approvedByUid.size() >= 1 && data.approvedByUid.size() <= 128
+        && data.approvedByName is string && data.approvedByName.size() >= 2 && data.approvedByName.size() <= 120
+        && data.approvalDate is timestamp
+        && (data.customaryFeeGhs is int || data.customaryFeeGhs is float) && data.customaryFeeGhs >= 0
+        && data.paymentStatus in ['Unpaid', 'Partial', 'Paid']
+        && data.status in ['Active', 'Revoked', 'Transferred'];
+    }
+
+    function isValidAllocationPayment(data) {
+      return data.keys().hasAll([
+          'allocationId', 'parcelId', 'parcelCode', 'applicantUid', 'applicantName',
+          'amountGhs', 'paymentStatus', 'receiptRef', 'recordedByUid', 'recordedAt'
+        ])
+        && data.keys().hasOnly([
+          'allocationId', 'parcelId', 'parcelCode', 'applicantUid', 'applicantName',
+          'amountGhs', 'paymentStatus', 'receiptRef', 'recordedByUid', 'recordedAt'
+        ])
+        && isValidId(data.allocationId)
+        && isValidId(data.parcelId)
+        && data.parcelCode is string && data.parcelCode.size() >= 3 && data.parcelCode.size() <= 32
+        && data.applicantUid is string && data.applicantUid.size() >= 1 && data.applicantUid.size() <= 128
+        && data.applicantName is string && data.applicantName.size() >= 2 && data.applicantName.size() <= 120
+        && (data.amountGhs is int || data.amountGhs is float) && data.amountGhs >= 0
+        && data.paymentStatus in ['Pending', 'Partial', 'Paid']
+        && data.receiptRef is string && data.receiptRef.size() >= 2 && data.receiptRef.size() <= 80
+        && data.recordedByUid is string && data.recordedByUid.size() >= 1 && data.recordedByUid.size() <= 128
+        && data.recordedAt is timestamp;
+    }
+
+    function isValidParcelTrackingEvent(data) {
+      return data.keys().hasAll([
+          'parcelId', 'parcelCode', 'eventType', 'summary',
+          'actorUid', 'actorName', 'isPublicCadastre', 'timestamp'
+        ])
+        && data.keys().hasOnly([
+          'parcelId', 'parcelCode', 'eventType', 'summary',
+          'previousStatus', 'newStatus', 'actorUid', 'actorName', 'isPublicCadastre', 'timestamp'
+        ])
+        && isValidId(data.parcelId)
+        && data.parcelCode is string && data.parcelCode.size() >= 3 && data.parcelCode.size() <= 32
+        && data.eventType in [
+          'Registered', 'Boundary Updated', 'Application Submitted',
+          'Verification Started', 'Allocated', 'Rejected',
+          'Status Changed', 'Payment Recorded', 'Document Attached'
+        ]
+        && data.summary is string && data.summary.size() >= 2 && data.summary.size() <= 400
+        && (!('previousStatus' in data) || (data.previousStatus is string && data.previousStatus.size() <= 40))
+        && (!('newStatus' in data) || (data.newStatus is string && data.newStatus.size() <= 40))
+        && data.actorUid is string && data.actorUid.size() >= 1 && data.actorUid.size() <= 128
+        && data.actorName is string && data.actorName.size() >= 2 && data.actorName.size() <= 120
+        && data.isPublicCadastre == true
+        && data.timestamp is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+          'userUid', 'userName', 'userRole', 'action',
+          'entityType', 'entityId', 'details', 'timestamp'
+        ])
+        && data.keys().hasOnly([
+          'userUid', 'userName', 'userRole', 'action',
+          'entityType', 'entityId', 'details', 'timestamp'
+        ])
+        && data.userUid is string && data.userUid.size() >= 1 && data.userUid.size() <= 128
+        && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 120
+        && data.userRole is string && data.userRole.size() >= 2 && data.userRole.size() <= 40
+        && data.action is string && data.action.size() >= 2 && data.action.size() <= 120
+        && data.entityType is string && data.entityType.size() >= 2 && data.entityType.size() <= 60
+        && data.entityId is string && data.entityId.size() >= 1 && data.entityId.size() <= 128
+        && data.details is string && data.details.size() >= 2 && data.details.size() <= 500
+        && data.timestamp is timestamp;
+    }
+
+    // 4. Collection Rules
+
+    // Users & Isolated Private Info
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isPalaceStaff());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isEmailVerified() && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && isOwner(userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isBootstrappedAdmin() && incoming().role == 'super_admin')
+          || (!isBootstrappedAdmin() && incoming().role == 'applicant')
+        );
+      allow update: if isEmailVerified() && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isSuperAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'department', 'displayName', 'updatedAt']))
+          || (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'department', 'updatedAt']))
+        );
+      allow delete: if false;
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && (isOwner(userId) || isPalaceStaff());
+        allow list: if isOwner(userId) || isBootstrappedAdmin();
+        allow create: if isEmailVerified() && isValidId(userId) && isValidId(docId)
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == request.auth.uid
+          && incoming().updatedAt == request.time;
+        allow update: if isEmailVerified() && isValidId(userId) && isValidId(docId)
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'phone', 'updatedAt']);
+        allow delete: if false;
+      }
+    }
+
+    // Land Parcels (Public Cadastre within signed-in Palace Portal; no PII stored here)
+    match /parcels/{parcelId} {
+      allow get: if isValidId(parcelId) && isSignedIn();
+      allow list: if isSignedIn() && resource.data.isPublicCadastre == true;
+      allow create: if isEmailVerified() && isValidId(parcelId)
+        && isSurveyorOrAdmin()
+        && isValidLandParcel(incoming())
+        && incoming().createdByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isEmailVerified() && isValidId(parcelId)
+        && isValidLandParcel(incoming())
+        && incoming().createdByUid == existing().createdByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Super Admin full administrative correction
+          (isSuperAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'zone', 'landUse', 'areaSqm', 'areaAcres', 'centroidLat', 'centroidLng',
+            'coordinates', 'status', 'surveyPlanRef', 'customaryFeeGhs', 'notes', 'updatedAt'
+          ]))
+          // Action 2: Surveyor/Admin boundary or survey update (cannot overwrite Allocated parcel status)
+          || (isSurveyorOrAdmin() && existing().status != 'Allocated' && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'zone', 'landUse', 'areaSqm', 'areaAcres', 'centroidLat', 'centroidLng',
+            'coordinates', 'surveyPlanRef', 'customaryFeeGhs', 'notes', 'updatedAt'
+          ]))
+          // Action 3: Palace Staff moving parcel to Pending when application enters verification
+          || (isPalaceStaff() && existing().status == 'Available' && incoming().status == 'Pending'
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          // Action 4: Approving Officer allocating an Available or Pending parcel (prevents double allocation)
+          || (isApprovingOfficer() && existing().status in ['Available', 'Pending'] && incoming().status == 'Allocated'
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          // Action 5: Palace Admin releasing a Pending parcel back to Available on rejection
+          || (isPalaceAdmin() && existing().status == 'Pending' && incoming().status == 'Available'
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          // Action 6: Palace Admin or Super Admin marking a non-Allocated parcel Disputed
+          || (isPalaceAdmin() && existing().status in ['Available', 'Pending'] && incoming().status == 'Disputed'
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isValidId(parcelId) && isSuperAdmin();
+    }
+
+    // Parcel Documents
+    match /documents/{documentId} {
+      allow get: if isValidId(documentId) && isSignedIn();
+      allow list: if isSignedIn() && resource.data.isPublicCadastre == true;
+      allow create: if isEmailVerified() && isValidId(documentId)
+        && isSurveyorOrAdmin()
+        && isValidParcelDocument(incoming())
+        && incoming().uploadedByUid == request.auth.uid
+        && incoming().uploadedAt == request.time
+        && exists(/databases/$(database)/documents/parcels/$(incoming().parcelId));
+      allow update: if false;
+      allow delete: if isValidId(documentId) && isSuperAdmin();
+    }
+
+    // Land Applications
+    match /applications/{applicationId} {
+      allow get: if isValidId(applicationId) && isSignedIn()
+        && (resource.data.applicantUid == request.auth.uid || isPalaceStaff());
+      allow list: if isSignedIn() && (resource.data.applicantUid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isEmailVerified() && isValidId(applicationId)
+        && isValidLandApplication(incoming())
+        && incoming().applicantUid == request.auth.uid
+        && incoming().status == 'Submitted'
+        && incoming().submittedAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/parcels/$(incoming().parcelId))
+        && get(/databases/$(database)/documents/parcels/$(incoming().parcelId)).data.status in ['Available', 'Pending'];
+      allow update: if isEmailVerified() && isValidId(applicationId)
+        && isValidLandApplication(incoming())
+        && incoming().applicantUid == existing().applicantUid
+        && incoming().parcelId == existing().parcelId
+        && incoming().applicationCode == existing().applicationCode
+        && incoming().submittedAt == existing().submittedAt
+        && incoming().updatedAt == request.time
+        && (
+          // Super Admin correction override
+          (isSuperAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewerNotes', 'reviewedByName', 'updatedAt']))
+          // Terminal state lock: non-super-admins cannot modify Approved or Rejected applications
+          || (
+            existing().status in ['Submitted', 'Under Verification'] && (
+              // Palace Admin moves Submitted -> Under Verification
+              (isPalaceAdmin() && incoming().status == 'Under Verification'
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewerNotes', 'reviewedByName', 'updatedAt']))
+              // Approving Officer approves or rejects
+              || (isApprovingOfficer() && incoming().status in ['Approved', 'Rejected']
+                && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewerNotes', 'reviewedByName', 'updatedAt']))
+            )
+          )
+        );
+      allow delete: if isValidId(applicationId) && isSuperAdmin();
+
+      match /private/{docId} {
+        allow get: if isValidId(applicationId) && isValidId(docId) && isSignedIn()
+          && (get(/databases/$(database)/documents/applications/$(applicationId)).data.applicantUid == request.auth.uid || isPalaceStaff());
+        allow list: if isBootstrappedAdmin();
+        allow create: if isEmailVerified() && isValidId(applicationId) && isValidId(docId)
+          && isValidApplicationContact(incoming())
+          && incoming().applicantUid == request.auth.uid
+          && incoming().updatedAt == request.time;
+        allow update: if isEmailVerified() && isValidId(applicationId) && isValidId(docId)
+          && isValidApplicationContact(incoming())
+          && incoming().applicantUid == existing().applicantUid
+          && incoming().applicantUid == request.auth.uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['applicantPhone', 'nationalIdRef', 'applicantAddress', 'updatedAt']);
+        allow delete: if isValidId(applicationId) && isValidId(docId) && isSuperAdmin();
+      }
+    }
+
+    // Land Allocations (Atomic sync with Parcel status == 'Allocated')
+    match /allocations/{allocationId} {
+      allow get: if isValidId(allocationId) && isSignedIn()
+        && (resource.data.applicantUid == request.auth.uid || isPalaceStaff());
+      allow list: if isSignedIn() && (resource.data.applicantUid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isEmailVerified() && isValidId(allocationId)
+        && isApprovingOfficer()
+        && isValidLandAllocation(incoming())
+        && incoming().approvedByUid == request.auth.uid
+        && incoming().approvalDate == request.time
+        && exists(/databases/$(database)/documents/parcels/$(incoming().parcelId))
+        && get(/databases/$(database)/documents/parcels/$(incoming().parcelId)).data.status in ['Available', 'Pending']
+        && getAfter(/databases/$(database)/documents/parcels/$(incoming().parcelId)).data.status == 'Allocated';
+      allow update: if isEmailVerified() && isValidId(allocationId)
+        && isValidLandAllocation(incoming())
+        && incoming().parcelId == existing().parcelId
+        && incoming().applicationId == existing().applicationId
+        && incoming().applicantUid == existing().applicantUid
+        && incoming().approvedByUid == existing().approvedByUid
+        && incoming().approvalDate == existing().approvalDate
+        && (
+          (isSuperAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus', 'status']))
+          || (isPalaceAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['paymentStatus']))
+        );
+      allow delete: if isValidId(allocationId) && isSuperAdmin();
+    }
+
+    // Payments
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isSignedIn()
+        && (resource.data.applicantUid == request.auth.uid || isPalaceStaff());
+      allow list: if isSignedIn() && (resource.data.applicantUid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isEmailVerified() && isValidId(paymentId)
+        && isPalaceAdmin()
+        && isValidAllocationPayment(incoming())
+        && incoming().recordedByUid == request.auth.uid
+        && incoming().recordedAt == request.time
+        && existsAfter(/databases/$(database)/documents/allocations/$(incoming().allocationId));
+      allow update: if isEmailVerified() && isValidId(paymentId)
+        && isPalaceAdmin()
+        && isValidAllocationPayment(incoming())
+        && incoming().allocationId == existing().allocationId
+        && incoming().parcelId == existing().parcelId
+        && incoming().applicantUid == existing().applicantUid
+        && incoming().recordedByUid == existing().recordedByUid
+        && incoming().recordedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['amountGhs', 'paymentStatus', 'receiptRef', 'recordedAt']);
+      allow delete: if isValidId(paymentId) && isSuperAdmin();
+    }
+
+    // Parcel Tracking History
+    match /parcelHistory/{eventId} {
+      allow get: if isValidId(eventId) && isSignedIn();
+      allow list: if isSignedIn() && resource.data.isPublicCadastre == true;
+      allow create: if isEmailVerified() && isValidId(eventId)
+        && isValidParcelTrackingEvent(incoming())
+        && incoming().actorUid == request.auth.uid
+        && incoming().timestamp == request.time
+        && existsAfter(/databases/$(database)/documents/parcels/$(incoming().parcelId));
+      allow update, delete: if false;
+    }
+
+    // Audit Logs
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isPalaceStaff();
+      allow list: if isBootstrappedAdmin();
+      allow create: if isEmailVerified() && isValidId(logId)
+        && isValidAuditLog(incoming())
+        && incoming().userUid == request.auth.uid
+        && incoming().timestamp == request.time;
+      allow update, delete: if false;
+    }
+  }
+}

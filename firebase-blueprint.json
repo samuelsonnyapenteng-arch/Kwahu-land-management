@@ -1,0 +1,319 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public role and display identity for Kwahu Abetifi Palace land portal users.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": {
+          "type": "string",
+          "enum": ["super_admin", "palace_admin", "surveyor", "approving_officer", "applicant"]
+        },
+        "department": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII contact details for a portal user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "LandParcel": {
+      "title": "LandParcel",
+      "description": "Digitized customary land parcel under Kwahu Abetifi Palace administration.",
+      "type": "object",
+      "properties": {
+        "parcelCode": { "type": "string", "pattern": "^[A-Z0-9\\-]{3,32}$", "maxLength": 32 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "zone": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "landUse": {
+          "type": "string",
+          "enum": ["Residential", "Commercial", "Agricultural", "Civic"]
+        },
+        "areaSqm": { "type": "number" },
+        "areaAcres": { "type": "number" },
+        "centroidLat": { "type": "number" },
+        "centroidLng": { "type": "number" },
+        "coordinates": { "type": "array" },
+        "status": {
+          "type": "string",
+          "enum": ["Available", "Pending", "Allocated", "Disputed"]
+        },
+        "surveyPlanRef": { "type": "string", "maxLength": 80 },
+        "customaryFeeGhs": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "isPublicCadastre": { "type": "boolean" },
+        "createdByUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "parcelCode",
+        "title",
+        "zone",
+        "landUse",
+        "areaSqm",
+        "areaAcres",
+        "centroidLat",
+        "centroidLng",
+        "coordinates",
+        "status",
+        "customaryFeeGhs",
+        "isPublicCadastre",
+        "createdByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ParcelDocument": {
+      "title": "ParcelDocument",
+      "description": "Survey plan, site plan, or Palace allocation document metadata linked to a parcel.",
+      "type": "object",
+      "properties": {
+        "parcelId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "parcelCode": { "type": "string", "maxLength": 32 },
+        "documentType": {
+          "type": "string",
+          "enum": ["Survey Plan", "Site Plan", "Palace Allocation Note", "Boundary Verification", "Other"]
+        },
+        "referenceNo": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "summary": { "type": "string", "maxLength": 600 },
+        "verifiedBy": { "type": "string", "maxLength": 120 },
+        "isPublicCadastre": { "type": "boolean" },
+        "uploadedByUid": { "type": "string", "maxLength": 128 },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "parcelId",
+        "parcelCode",
+        "documentType",
+        "referenceNo",
+        "fileName",
+        "isPublicCadastre",
+        "uploadedByUid",
+        "uploadedAt"
+      ]
+    },
+    "LandApplication": {
+      "title": "LandApplication",
+      "description": "Customary land application submitted by a prospective applicant for a parcel.",
+      "type": "object",
+      "properties": {
+        "applicationCode": { "type": "string", "maxLength": 32 },
+        "parcelId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "parcelCode": { "type": "string", "maxLength": 32 },
+        "parcelZone": { "type": "string", "maxLength": 120 },
+        "applicantUid": { "type": "string", "maxLength": 128 },
+        "applicantName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "purpose": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "proposedDevelopment": { "type": "string", "maxLength": 800 },
+        "status": {
+          "type": "string",
+          "enum": ["Submitted", "Under Verification", "Approved", "Rejected"]
+        },
+        "reviewerNotes": { "type": "string", "maxLength": 800 },
+        "reviewedByName": { "type": "string", "maxLength": 120 },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "applicationCode",
+        "parcelId",
+        "parcelCode",
+        "parcelZone",
+        "applicantUid",
+        "applicantName",
+        "purpose",
+        "status",
+        "submittedAt",
+        "updatedAt"
+      ]
+    },
+    "ApplicationContact": {
+      "title": "ApplicationContact",
+      "description": "Private applicant contact and identification details for an application.",
+      "type": "object",
+      "properties": {
+        "applicantUid": { "type": "string", "maxLength": 128 },
+        "applicantEmail": { "type": "string", "maxLength": 200 },
+        "applicantPhone": { "type": "string", "minLength": 5, "maxLength": 40 },
+        "nationalIdRef": { "type": "string", "maxLength": 64 },
+        "applicantAddress": { "type": "string", "maxLength": 240 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["applicantUid", "applicantEmail", "applicantPhone", "updatedAt"]
+    },
+    "LandAllocation": {
+      "title": "LandAllocation",
+      "description": "Approved customary land allocation record granted by Kwahu Abetifi Palace.",
+      "type": "object",
+      "properties": {
+        "allocationCode": { "type": "string", "maxLength": 32 },
+        "applicationId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "parcelId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "parcelCode": { "type": "string", "maxLength": 32 },
+        "applicantUid": { "type": "string", "maxLength": 128 },
+        "applicantName": { "type": "string", "maxLength": 120 },
+        "approvedByUid": { "type": "string", "maxLength": 128 },
+        "approvedByName": { "type": "string", "maxLength": 120 },
+        "approvalDate": { "type": "string", "format": "date-time" },
+        "customaryFeeGhs": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["Unpaid", "Partial", "Paid"] },
+        "status": { "type": "string", "enum": ["Active", "Revoked", "Transferred"] }
+      },
+      "required": [
+        "allocationCode",
+        "applicationId",
+        "parcelId",
+        "parcelCode",
+        "applicantUid",
+        "applicantName",
+        "approvedByUid",
+        "approvedByName",
+        "approvalDate",
+        "customaryFeeGhs",
+        "paymentStatus",
+        "status"
+      ]
+    },
+    "AllocationPayment": {
+      "title": "AllocationPayment",
+      "description": "Customary fee payment entry associated with a land allocation.",
+      "type": "object",
+      "properties": {
+        "allocationId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "parcelId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "parcelCode": { "type": "string", "maxLength": 32 },
+        "applicantUid": { "type": "string", "maxLength": 128 },
+        "applicantName": { "type": "string", "maxLength": 120 },
+        "amountGhs": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["Pending", "Partial", "Paid"] },
+        "receiptRef": { "type": "string", "maxLength": 80 },
+        "recordedByUid": { "type": "string", "maxLength": 128 },
+        "recordedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "allocationId",
+        "parcelId",
+        "parcelCode",
+        "applicantUid",
+        "applicantName",
+        "amountGhs",
+        "paymentStatus",
+        "receiptRef",
+        "recordedByUid",
+        "recordedAt"
+      ]
+    },
+    "ParcelTrackingEvent": {
+      "title": "ParcelTrackingEvent",
+      "description": "Chronological tracking event for parcel lifecycle and allocation history.",
+      "type": "object",
+      "properties": {
+        "parcelId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "maxLength": 128 },
+        "parcelCode": { "type": "string", "maxLength": 32 },
+        "eventType": {
+          "type": "string",
+          "enum": [
+            "Registered",
+            "Boundary Updated",
+            "Application Submitted",
+            "Verification Started",
+            "Allocated",
+            "Rejected",
+            "Status Changed",
+            "Payment Recorded",
+            "Document Attached"
+          ]
+        },
+        "summary": { "type": "string", "maxLength": 400 },
+        "previousStatus": { "type": "string", "maxLength": 40 },
+        "newStatus": { "type": "string", "maxLength": 40 },
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 120 },
+        "isPublicCadastre": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "parcelId",
+        "parcelCode",
+        "eventType",
+        "summary",
+        "actorUid",
+        "actorName",
+        "isPublicCadastre",
+        "timestamp"
+      ]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Administrative audit trail entry for Palace land management actions.",
+      "type": "object",
+      "properties": {
+        "userUid": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 120 },
+        "userRole": { "type": "string", "maxLength": 40 },
+        "action": { "type": "string", "maxLength": 120 },
+        "entityType": { "type": "string", "maxLength": 60 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "userName", "userRole", "action", "entityType", "entityId", "details", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Public role and display profile for each authenticated user."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated user PII (email, phone) accessible only to owner or Palace staff."
+    },
+    "/parcels/{parcelId}": {
+      "schema": { "$ref": "#/entities/LandParcel" },
+      "description": "Registered land parcels with polygon vertices and status."
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/ParcelDocument" },
+      "description": "Survey and allocation document records linked to land parcels."
+    },
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/LandApplication" },
+      "description": "Land applications submitted by prospective applicants."
+    },
+    "/applications/{applicationId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/ApplicationContact" },
+      "description": "Private applicant contact and ID references isolated from public application metadata."
+    },
+    "/allocations/{allocationId}": {
+      "schema": { "$ref": "#/entities/LandAllocation" },
+      "description": "Approved customary land allocations."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/AllocationPayment" },
+      "description": "Customary fee payment records tied to allocations."
+    },
+    "/parcelHistory/{eventId}": {
+      "schema": { "$ref": "#/entities/ParcelTrackingEvent" },
+      "description": "Parcel status and allocation tracking timeline events."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Administrative activity audit log."
+    }
+  }
+}

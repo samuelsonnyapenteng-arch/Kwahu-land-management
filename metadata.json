@@ -1,0 +1,6 @@
+{
+  "name": "Kwahu Abetifi Palace — Customary Land GIS",
+  "description": "Web-based Geographic Information System for customary land mapping, parcel registration, application tracking, and allocation management for Kwahu Abetifi Palace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
